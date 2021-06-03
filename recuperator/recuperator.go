@@ -161,8 +161,12 @@ func fanSpeed(s string) string {
 		return "1"
 	}
 
-	if s == "80" {
+	if s == "60" {
 		return "2"
+	}
+
+	if s == "80" {
+		return "3"
 	}
 
 	if s == "100" {
