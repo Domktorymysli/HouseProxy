@@ -66,8 +66,8 @@ func (c *Client) GetData() (Data, error) {
 	return Data{
 		SupplyAir:       parseTemp(a[0]),
 		ExhaustAir:      parseTemp(a[6]),
-		ExtractAir:      parseTemp(a[4]),
-		OutsideAir:      parseTemp(a[10]),
+		ExtractAir:      parseTemp(a[6]),
+		OutsideAir:      parseTemp(a[9]),
 		Humidity:        a[13],
 		SupplyFanSpeed:  a[15],
 		ExtractFanSpeed: a[16],
