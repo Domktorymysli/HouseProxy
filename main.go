@@ -16,7 +16,7 @@ func getListenAddress(port string) string {
 }
 
 func main() {
-	cnf := config.LoadConfiguration("cnf.json")
+	cnf := config.LoadConfiguration("config.json")
 	fromIp := "192.168.0.1"
 
 	fmt.Println("--------------------------------------------------")
