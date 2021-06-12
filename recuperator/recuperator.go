@@ -1,6 +1,7 @@
 package recuperator
 
 import (
+	"errors"
 	"fmt"
 	"io/ioutil"
 	"net/http"
@@ -63,12 +64,16 @@ func (c *Client) GetData() (Data, error) {
 		return Data{}, err
 	}
 
+	if len(a) < 16 {
+		return Data{}, errors.New("recuperator: invalid data response")
+	}
+
 	return Data{
 		SupplyAir:       parseTemp(a[0]),
 		ExhaustAir:      parseTemp(a[6]),
 		ExtractAir:      parseTemp(a[6]),
 		OutsideAir:      parseTemp(a[9]),
-		Humidity:        a[13],
+		Humidity:        parsePercent(a[13]),
 		SupplyFanSpeed:  a[15],
 		ExtractFanSpeed: a[16],
 		Temperature:     t.Temperature,
@@ -87,6 +92,10 @@ func (c *Client) GetTemperature() (Temperature, error) {
 
 	body, _ := ioutil.ReadAll(resp.Body)
 	a := strings.Split(string(body), ";")
+
+	if len(a) <= 1 {
+		return Temperature{}, errors.New("recuperator: empty temperature")
+	}
 
 	return Temperature{
 		Temperature: a[1],
@@ -150,6 +159,14 @@ func parseTemp(t string) string {
 		return "0.0"
 	}
 	return fmt.Sprintf("%.2f", s/10)
+}
+
+func parsePercent(t string) string {
+	s, err := strconv.ParseFloat(t, 32)
+	if err != nil {
+		return "0.0"
+	}
+	return fmt.Sprintf("%.2f", s/100)
 }
 
 func fanSpeed(s string) string {

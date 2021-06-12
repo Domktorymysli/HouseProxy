@@ -1,0 +1,23 @@
+{
+  "server": {
+    "port": "18080"
+  },
+  "weather": {
+    "apiKey": "apiKey",
+    "city": "Warsaw,pl"
+  },
+  "recuperator": {
+    "ip": "192.168.0.71",
+    "login": "admin",
+    "password": "admin"
+  },
+  "clus": [
+    {
+      "name": "gate",
+      "ip": "192.168.0.6",
+      "port": "1234",
+      "key": "/ABCDEF==",
+      "iv": "AVCDEF=="
+    }
+  ]
+}

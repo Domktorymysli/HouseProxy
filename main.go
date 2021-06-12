@@ -1,82 +1,87 @@
 package main
 
 import (
-	"encoding/json"
 	"fmt"
 	"net/http"
-	"os"
+	"recuperator/clu"
+	"recuperator/config"
+	"recuperator/http_api"
 	"recuperator/recuperator"
-	"strconv"
+	"recuperator/weather"
+	"time"
 )
 
-func getEnv(key, fallback string) string {
-	if value, ok := os.LookupEnv(key); ok {
-		return value
-	}
-	return fallback
-}
-
-func getListenAddress() string {
-	port := getEnv("PORT", "18080")
+func getListenAddress(port string) string {
 	return ":" + port
 }
 
 func main() {
-	recuperatorIpAddress := getEnv("RECUPERATOR_IP", "192.168.0.71")
-	recuperatorLogin := getEnv("RECUPERATOR_LOGIN", "admin")
-	recuperatorPass := getEnv("RECUPERATOR_PASS", "admin")
+	cnf := config.LoadConfiguration("cnf.json")
+	fromIp := "192.168.0.1"
 
-	fmt.Printf("--------------------------------------------------\n")
-	fmt.Printf("HouseProxy at " + getListenAddress() + "\n")
-	fmt.Printf("Recuperator IP: " + recuperatorIpAddress + "\n")
-	fmt.Printf("--------------------------------------------------\n")
+	fmt.Println("--------------------------------------------------")
+	fmt.Println("--              HOME PROXY 1.0                  --")
+	fmt.Println("--------------------------------------------------")
 
-	r := recuperator.NewClient(recuperatorIpAddress, recuperatorLogin, recuperatorPass)
+	r := recuperator.NewClient(cnf.Recuperator.Ip, cnf.Recuperator.Login, cnf.Recuperator.Password)
+	w := weather.NewClient(cnf.Weather.ApiKey)
+	c := clu.NewClient(cnf.Clus[0].Ip, cnf.Clus[0].Port, cnf.Clus[0].Key, cnf.Clus[0].Iv, fromIp)
 
-	http.HandleFunc("/recuperator/getData", func(writer http.ResponseWriter, request *http.Request) {
-		fmt.Printf("getData\n")
-		d, _ := r.GetData()
-		j, _ := json.Marshal(d)
-		writer.Write(j)
-	})
+	startRecuperatorTicker(r, c)
+	startWeatherTicker(w, c, cnf.Weather.City)
 
-	http.HandleFunc("/recuperator/getTemperature", func(writer http.ResponseWriter, request *http.Request) {
-		fmt.Printf("getTemperature\n")
-		d, _ := r.GetTemperature()
-		j, _ := json.Marshal(d)
+	http_api.RegisterHandlers(r)
 
-		writer.Write(j)
-	})
-
-	http.HandleFunc("/recuperator/setTemperature", func(writer http.ResponseWriter, request *http.Request) {
-		fmt.Printf("setTemperature\n")
-		keys := request.URL.Query()
-		i, err := strconv.Atoi(keys.Get("value"))
-		if err != nil {
-			i = 22
-		}
-		d, _ := r.SetTemperature(i)
-		j, _ := json.Marshal(d)
-		writer.Write(j)
-	})
-
-	http.HandleFunc("/recuperator/setFanSpeed", func(writer http.ResponseWriter, request *http.Request) {
-		fmt.Printf("setFanSpeed\n")
-		keys := request.URL.Query()
-		i, err := strconv.Atoi(keys.Get("value"))
-		if err != nil {
-			i = 1
-		}
-		d, _ := r.SetFanSpeed(i)
-		j, _ := json.Marshal(d)
-		writer.Write(j)
-	})
-
-	http.HandleFunc("/", func(writer http.ResponseWriter, request *http.Request) {
-		writer.Write([]byte("HomeProxy"))
-	})
-
-	if err := http.ListenAndServe(getListenAddress(), nil); err != nil {
+	if err := http.ListenAndServe(getListenAddress(cnf.Server.Port), nil); err != nil {
 		panic(err)
 	}
+}
+
+func startWeatherTicker(w weather.Weather, c clu.Clu, city string) {
+	go func() {
+		for now := range time.Tick(time.Minute * 1) {
+			fmt.Println("weather: ", now)
+
+			f, err := w.GetForecast(city)
+
+			if err != nil {
+				fmt.Println(err)
+			}
+
+			if len(f.List) > 1 {
+
+				sunrise := time.Unix(f.City.Sunrise, f.City.Timezone)
+				sunset := time.Unix(f.City.Sunset, f.City.Timezone)
+
+				c.SetVar("\"weatherSunrise\"", "\""+sunrise.Format(time.Kitchen)+"\"")
+				c.SetVar("\"weatherSunset\"", "\""+sunset.Format(time.Kitchen)+"\"")
+				c.SetVar("\"weatherDescription\"", "\""+f.List[0].Weather[0].Description+"\"")
+				c.SetVar("\"weatherFeelsLike\"", fmt.Sprintf("%f", f.List[0].Main.FeelsLike))
+				c.SetVar("\"weatherPressure\"", "10") //fmt.Sprintf("%i", f.List[0].Main.Pressure))
+				c.SetVar("\"weatherTemperature\"", fmt.Sprintf("%f", f.List[0].Main.Temp))
+			}
+		}
+	}()
+}
+
+func startRecuperatorTicker(r recuperator.Recuperator, c clu.Clu) {
+	go func() {
+		for now := range time.Tick(time.Second * 5) {
+			fmt.Println("recuperator", now)
+
+			d, err := r.GetData()
+			if err != nil {
+				fmt.Println(err)
+			}
+
+			c.SetVar("\"recuperatorTemperature\"", d.Temperature)
+			c.SetVar("\"recuperatorFanSpeed\"", d.FanSpeed)
+			c.SetVar("\"recuperatorSupplyAir\"", d.SupplyAir)
+			c.SetVar("\"recuperatorExhaustAir\"", d.ExhaustAir)
+			c.SetVar("\"recuperatorExtractAir\"", d.ExtractAir)
+			c.SetVar("\"recuperatorOutsideAir\"", d.OutsideAir)
+			c.SetVar("\"recuperatorHumidity\"", d.Humidity)
+			fmt.Println("Recuperator updated:", d)
+		}
+	}()
 }
